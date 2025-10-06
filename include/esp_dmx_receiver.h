@@ -11,20 +11,19 @@
 
 class ESP_Dmx_Receiver {
 public:
-    ESP_Dmx_Receiver();
+    ESP_Dmx_Receiver(uart_port_t uart_num);
     ~ESP_Dmx_Receiver();
     void    init();
     void    receive();
     bool    has_new_data() { return _flag_new_data; };
     uint8_t get_value(uint16_t channel) { return _dmx_buffer[channel]; };
 
-    private:
-    
-    friend void _esp_dmx_receiver_task(void* pvParameters);
+    QueueHandle_t* get_uart_queue() {return &_uart_queue;}
 
-    const uart_port_t   _dmx_uart_num = UART_NUM_1;
-    const gpio_num_t    _dmx_rx_pin = GPIO_NUM_18;
-    const int           _dmx_buffer_size = 513;
+    private:
+    const uart_port_t _dmx_uart_num;
+
+    friend void _esp_dmx_receiver_task(void* pvParameters);
 
     uint8_t         _dmx_buffer[513];
     bool            _flag_receive = false;

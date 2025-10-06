@@ -1,56 +1,123 @@
 #include "esp_dmx_transmitter.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
-#include "esp_timer.h"
-#include "soc/periph_defs.h"
+#include <rom/ets_sys.h>
+#include <esp_log.h>
+#include "soc/gpio_reg.h"
 
-#define DMX_UART_NUM      UART_NUM_1
-#define DMX_TX_PIN        17   // Set to your GPIO
-#define DMX_PACKET_SIZE   513  // 1 start code + 512 channels
+#define TAG "ESP_DMX_TRANSMITTER"
+
+void _esp_dmx_transmitter_task(void *pvParameters) {
+    ESP_Dmx_Transmitter* p_dmx_transmitter = static_cast<ESP_Dmx_Transmitter*>(pvParameters);
+
+    while(true) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+        if(!p_dmx_transmitter->_flag_transmit) continue;
+        p_dmx_transmitter->_flag_transmit = false;        
+
+        size_t num_symbols = 1 + 513 * 5;
+        rmt_symbol_word_t *items = (rmt_symbol_word_t*)malloc(num_symbols * sizeof(rmt_symbol_word_t));
 
 
-void dmx_send_packet(uint8_t *data) {
-    // --- Send BREAK (low for at least 88 µs) ---
-    uart_set_line_inverse(DMX_UART_NUM, UART_SIGNAL_TXD_INV); // invert TX so idle is low
-    esp_rom_delay_us(88); // ~88 µs break
-    uart_set_line_inverse(DMX_UART_NUM, UART_SIGNAL_INV_DISABLE); // restore
+        items[0].duration0 = 25;        //  break 100us > 88us
+        items[0].level0 = 0;            //  break = 0
+        items[0].duration1 = 3;         //  MAB 12us > 8us
+        items[0].level1 = 1;            //  MAB = 1
 
-    // --- Send MAB (high for at least 8 µs) ---
-    esp_rom_delay_us(8); // ~8 µs mark after break
+        for(int i = 0; i < 513; i++) {
+            uint16_t base_word = i * 5 + 1;
+            //  each bit is 4us
+            //  each message has 1 start bit (low)
+            //  each message has 2 stop bits (high)
+            //  each message (8 bits) goes from LSB to MSB
 
-    // --- Send DMX data (start code + 512 slots) ---
-    uart_write_bytes(DMX_UART_NUM, (const char*)data, DMX_PACKET_SIZE);
-    uart_wait_tx_done(DMX_UART_NUM, pdMS_TO_TICKS(20));
+            //  first word has start bit and bit 7 - 0
+            //  2nd word has bit 7 - 1 and bit 7 - 2
+            //  3rd word has bit 7 - 3 and bit 7 - 4
+            //  4th word has bit 7 - 5 and bit 7 - 6
+            //  5th word has bit 7 - 7 and two stop bits
+
+            uint8_t byte = p_dmx_transmitter->_dmx_buffer[i];
+            items[base_word].duration0 = 1;     //  1 start bit -> 4us
+            items[base_word].level0 = 0;        //  start bit = 0
+            items[base_word].duration1 = 1;     //  LSB = 1 bit -> 4 us
+            items[base_word].level1 = (byte & 0x01) ? 1 : 0; 
+
+            for(int i = 1; i < 3; i++) {
+                byte >>= 1;
+                items[base_word + i].duration0 = 1;
+                items[base_word + i].level0 = (byte & 0x01) ? 1 : 0;
+                byte >>= 1;
+                items[base_word + i].duration1 = 1;
+                items[base_word + i].level1 = (byte & 0x01) ? 1 : 0;
+            }
+
+            byte >>= 1;
+            items[base_word + 4].duration0 = 1;                     //  MSB = 1 bit -> 4 us
+            items[base_word + 4].level0 = (byte & 0x01) ? 1 : 0;    
+            items[base_word + 4].duration1 = 2;                     //  2 stop bits -> 8 us
+            items[base_word + 4].level1 = 1;                        //  stop bit = 1
+
+        }
+
+        ESP_ERROR_CHECK(
+            rmt_transmit(
+                p_dmx_transmitter->_tx_channel,
+                p_dmx_transmitter->_copy_encoder,
+                items,
+                num_symbols * sizeof(rmt_symbol_word_t),    // 4 bytes per symbol
+                &p_dmx_transmitter->_tx_config
+            )
+        );
+        rmt_tx_wait_all_done(p_dmx_transmitter->_tx_channel, portMAX_DELAY);
+        free(items);
+
+        vTaskDelay(pdMS_TO_TICKS(25)); //   About 44Hz -> 40Hz
+    }
 }
 
 void ESP_Dmx_Transmitter::init() {
-    uart_config_t uart_config = {
-        .baud_rate = 250000,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_2,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
+
+    rmt_tx_channel_config_t tx_chan_config = {
+        .gpio_num = GPIO_NUM_16,
+        .clk_src = RMT_CLK_SRC_DEFAULT, // Use the default clock source 
+        .resolution_hz = 250000,        // 1 tick, 4 us
+        .mem_block_symbols = 2046,      // Max possible, not sure how to reduce this yet
+        .trans_queue_depth = 4,         // set the number of transactions that can pend in the background
+        .intr_priority = 0,
+        .flags = {
+            .invert_out = false,
+            .with_dma = true,  
+            .io_loop_back = false,
+            .io_od_mode = false,
+            .allow_pd = false       
+        }
     };
 
-    ESP_ERROR_CHECK(uart_param_config(DMX_UART_NUM, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(DMX_UART_NUM, DMX_TX_PIN, UART_PIN_NO_CHANGE,
-                                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-    ESP_ERROR_CHECK(uart_driver_install(DMX_UART_NUM, 1024, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_chan_config, &_tx_channel));
 
+    ESP_ERROR_CHECK(rmt_enable(_tx_channel));
+
+    ESP_ERROR_CHECK(rmt_new_copy_encoder(&_copy_encoder_config, &_copy_encoder));
+
+    for(int i = 0; i < 513; i++) {
+        _dmx_buffer[i] = 0; // or fill with channel values
+    }
+
+    xTaskCreate(
+        _esp_dmx_transmitter_task, 
+        "_esp_dmx_transmitter_task", 
+        4096, 
+        this,
+        10,
+        NULL
+    );
     
 }
 
 void ESP_Dmx_Transmitter::transmit() {
-    // Build DMX buffer
-    uint8_t dmx_data[DMX_PACKET_SIZE];
-    dmx_data[0] = 0x00; // start code
-    for (int i = 1; i < DMX_PACKET_SIZE; i++) {
-        dmx_data[i] = 0x00; // or fill with channel values
+    while(_flag_transmit == true) {
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
-
-    while (1) {
-        dmx_send_packet(dmx_data);
-        vTaskDelay(pdMS_TO_TICKS(25)); // DMX refresh ~44 Hz (minimum spacing ~23 ms)
-    }
+    _flag_transmit = true;
 }

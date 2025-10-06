@@ -3,7 +3,7 @@
 
 const char* TAG = "ESP_DMX_RECEIVER";
 
-ESP_Dmx_Receiver::ESP_Dmx_Receiver() {}
+ESP_Dmx_Receiver::ESP_Dmx_Receiver(uart_port_t uart_num) : _dmx_uart_num(uart_num){}
 ESP_Dmx_Receiver::~ESP_Dmx_Receiver() {
     if (_uart_queue) {
         vQueueDelete(_uart_queue);
@@ -31,7 +31,7 @@ void _esp_dmx_receiver_task(void* pvParameters) {
 }
 
 void ESP_Dmx_Receiver::_read_dmx_buffer() {
-    uint8_t dmx_data[_dmx_buffer_size] = {0x00};
+    uint8_t dmx_data[513] = {0x00};
 
     uart_flush(_dmx_uart_num);
     esp_rom_delay_us(88);
@@ -39,7 +39,7 @@ void ESP_Dmx_Receiver::_read_dmx_buffer() {
     int length = uart_read_bytes(
         _dmx_uart_num,
         dmx_data,
-        _dmx_buffer_size,
+        513,
         50 / portTICK_PERIOD_MS
     );
 
@@ -52,12 +52,6 @@ void ESP_Dmx_Receiver::_read_dmx_buffer() {
 }
 
 void ESP_Dmx_Receiver::init() {
-    _dmx_buffer[0] = 0xFF;
-    for(int i = 1; i < 513; i++) {
-        _dmx_buffer[i] = 0x00;
-    }
-
-    // Initialize UART for DMX
     uart_config_t uart_config = {
         .baud_rate = 250000,
         .data_bits = UART_DATA_8_BITS,
@@ -80,12 +74,18 @@ void ESP_Dmx_Receiver::init() {
     );
     uart_driver_install(
         _dmx_uart_num,
-        _dmx_buffer_size * 2,   // RX buffer
-        0,                      // TX buffer unused
-        10,                     // Queue size for events
-        &_uart_queue,           // Event queue handle
-        0                       // No special interrupt flags
+        _dmx_buffer_size * 2,               // RX buffer
+        0,               // TX buffer unused
+        10,                                 // Queue size for events
+        _p_dmx_receiver->get_uart_queue(),  // Event queue handle
+        0                                   // No special interrupt flags
     );
+
+    _dmx_buffer[0] = 0xFF;
+    for(int i = 1; i < 513; i++) {
+        _dmx_buffer[i] = 0x00;
+    }
+   
 
     xTaskCreate(
         _esp_dmx_receiver_task, 
