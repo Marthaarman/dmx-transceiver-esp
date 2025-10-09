@@ -9,7 +9,7 @@
 
 class ESP_Dmx_Transmitter {
     public:
-        ESP_Dmx_Transmitter();
+        ESP_Dmx_Transmitter() {};
         ~ESP_Dmx_Transmitter() {};
         
         void init();

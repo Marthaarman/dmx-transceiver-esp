@@ -19,12 +19,12 @@ ESP_Dmx_Transceiver::~ESP_Dmx_Transceiver()
 }
 
 bool ESP_Dmx_Transceiver::init() {
-    _p_dmx_receiver = new ESP_Dmx_Receiver(_dmx_uart_num);
-    _p_dmx_transmitter = new ESP_Dmx_Transmitter(_dmx_uart_num);
+    // _p_dmx_receiver = new ESP_Dmx_Receiver(_dmx_uart_num);
+    _p_dmx_transmitter = new ESP_Dmx_Transmitter();
 
 
 
-    _p_dmx_receiver->init();
+    // _p_dmx_receiver->init();
     _p_dmx_transmitter->init();
     return true;
 }
