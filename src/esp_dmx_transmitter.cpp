@@ -24,6 +24,7 @@ void _esp_dmx_transmitter_task(void *pvParameters) {
         items[0].duration1 = 3;         //  MAB 12us > 8us
         items[0].level1 = 1;            //  MAB = 1
 
+
         for(int i = 0; i < 513; i++) {
             uint16_t base_word = i * 5 + 1;
             //  each bit is 4us
@@ -42,14 +43,13 @@ void _esp_dmx_transmitter_task(void *pvParameters) {
             items[base_word].level0 = 0;        //  start bit = 0
             items[base_word].duration1 = 1;     //  LSB = 1 bit -> 4 us
             items[base_word].level1 = (byte & 0x01) ? 1 : 0; 
-
-            for(int i = 1; i < 3; i++) {
+            for(int j = 1; j < 4; j++) {
                 byte >>= 1;
-                items[base_word + i].duration0 = 1;
-                items[base_word + i].level0 = (byte & 0x01) ? 1 : 0;
+                items[base_word + j].duration0 = 1;
+                items[base_word + j].level0 = (byte & 0x01) ? 1 : 0;
                 byte >>= 1;
-                items[base_word + i].duration1 = 1;
-                items[base_word + i].level1 = (byte & 0x01) ? 1 : 0;
+                items[base_word + j].duration1 = 1;
+                items[base_word + j].level1 = (byte & 0x01) ? 1 : 0;
             }
 
             byte >>= 1;
@@ -57,16 +57,15 @@ void _esp_dmx_transmitter_task(void *pvParameters) {
             items[base_word + 4].level0 = (byte & 0x01) ? 1 : 0;    
             items[base_word + 4].duration1 = 2;                     //  2 stop bits -> 8 us
             items[base_word + 4].level1 = 1;                        //  stop bit = 1
-
+            
         }
 
-        uint32_t x = 1;
         ESP_ERROR_CHECK(
             rmt_transmit(
                 p_dmx_transmitter->_tx_channel,
                 p_dmx_transmitter->_copy_encoder,
                 items,
-                x * sizeof(rmt_symbol_word_t),    // 4 bytes per symbol
+                num_symbols * sizeof(rmt_symbol_word_t),    // 4 bytes per symbol
                 &p_dmx_transmitter->_tx_config
             )
         );
@@ -106,74 +105,74 @@ void ESP_Dmx_Transmitter::init() {
     }
 
     
-    while(true) {
-        size_t num_symbols = 1 + 513 * 5;
-        rmt_symbol_word_t *items = (rmt_symbol_word_t*)malloc(num_symbols * sizeof(rmt_symbol_word_t));
+    // while(true) {
+    //     size_t num_symbols = 1 + 513 * 5;
+    //     rmt_symbol_word_t *items = (rmt_symbol_word_t*)malloc(num_symbols * sizeof(rmt_symbol_word_t));
 
 
-        items[0].duration0 = 25;        //  break 100us > 88us
-        items[0].level0 = 0;            //  break = 0
-        items[0].duration1 = 3;         //  MAB 12us > 8us
-        items[0].level1 = 1;            //  MAB = 1
+    //     items[0].duration0 = 25;        //  break 100us > 88us
+    //     items[0].level0 = 0;            //  break = 0
+    //     items[0].duration1 = 3;         //  MAB 12us > 8us
+    //     items[0].level1 = 1;            //  MAB = 1
 
 
-        for(int i = 0; i < 513; i++) {
-            uint16_t base_word = i * 5 + 1;
-            //  each bit is 4us
-            //  each message has 1 start bit (low)
-            //  each message has 2 stop bits (high)
-            //  each message (8 bits) goes from LSB to MSB
+    //     for(int i = 0; i < 513; i++) {
+    //         uint16_t base_word = i * 5 + 1;
+    //         //  each bit is 4us
+    //         //  each message has 1 start bit (low)
+    //         //  each message has 2 stop bits (high)
+    //         //  each message (8 bits) goes from LSB to MSB
 
-            //  first word has start bit and bit 7 - 0
-            //  2nd word has bit 7 - 1 and bit 7 - 2
-            //  3rd word has bit 7 - 3 and bit 7 - 4
-            //  4th word has bit 7 - 5 and bit 7 - 6
-            //  5th word has bit 7 - 7 and two stop bits
+    //         //  first word has start bit and bit 7 - 0
+    //         //  2nd word has bit 7 - 1 and bit 7 - 2
+    //         //  3rd word has bit 7 - 3 and bit 7 - 4
+    //         //  4th word has bit 7 - 5 and bit 7 - 6
+    //         //  5th word has bit 7 - 7 and two stop bits
 
-            uint8_t byte = _dmx_buffer[i];
-            items[base_word].duration0 = 1;     //  1 start bit -> 4us
-            items[base_word].level0 = 0;        //  start bit = 0
-            items[base_word].duration1 = 1;     //  LSB = 1 bit -> 4 us
-            items[base_word].level1 = (byte & 0x01) ? 1 : 0; 
-            for(int j = 1; j < 4; j++) {
-                byte >>= 1;
-                items[base_word + j].duration0 = 1;
-                items[base_word + j].level0 = (byte & 0x01) ? 1 : 0;
-                byte >>= 1;
-                items[base_word + j].duration1 = 1;
-                items[base_word + j].level1 = (byte & 0x01) ? 1 : 0;
-            }
+    //         uint8_t byte = _dmx_buffer[i];
+    //         items[base_word].duration0 = 1;     //  1 start bit -> 4us
+    //         items[base_word].level0 = 0;        //  start bit = 0
+    //         items[base_word].duration1 = 1;     //  LSB = 1 bit -> 4 us
+    //         items[base_word].level1 = (byte & 0x01) ? 1 : 0; 
+    //         for(int j = 1; j < 4; j++) {
+    //             byte >>= 1;
+    //             items[base_word + j].duration0 = 1;
+    //             items[base_word + j].level0 = (byte & 0x01) ? 1 : 0;
+    //             byte >>= 1;
+    //             items[base_word + j].duration1 = 1;
+    //             items[base_word + j].level1 = (byte & 0x01) ? 1 : 0;
+    //         }
 
-            byte >>= 1;
-            items[base_word + 4].duration0 = 1;                     //  MSB = 1 bit -> 4 us
-            items[base_word + 4].level0 = (byte & 0x01) ? 1 : 0;    
-            items[base_word + 4].duration1 = 2;                     //  2 stop bits -> 8 us
-            items[base_word + 4].level1 = 1;                        //  stop bit = 1
+    //         byte >>= 1;
+    //         items[base_word + 4].duration0 = 1;                     //  MSB = 1 bit -> 4 us
+    //         items[base_word + 4].level0 = (byte & 0x01) ? 1 : 0;    
+    //         items[base_word + 4].duration1 = 2;                     //  2 stop bits -> 8 us
+    //         items[base_word + 4].level1 = 1;                        //  stop bit = 1
             
-        }
+    //     }
 
-        ESP_ERROR_CHECK(
-            rmt_transmit(
-                _tx_channel,
-                _copy_encoder,
-                items,
-                num_symbols * sizeof(rmt_symbol_word_t),    // 4 bytes per symbol
-                &_tx_config
-            )
-        );
-        rmt_tx_wait_all_done(_tx_channel, portMAX_DELAY);
-        free(items);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    //     ESP_ERROR_CHECK(
+    //         rmt_transmit(
+    //             _tx_channel,
+    //             _copy_encoder,
+    //             items,
+    //             num_symbols * sizeof(rmt_symbol_word_t),    // 4 bytes per symbol
+    //             &_tx_config
+    //         )
+    //     );
+    //     rmt_tx_wait_all_done(_tx_channel, portMAX_DELAY);
+    //     free(items);
+    //     vTaskDelay(pdMS_TO_TICKS(1000));
+    // }
 
-    // xTaskCreate(
-    //     _esp_dmx_transmitter_task, 
-    //     "_esp_dmx_transmitter_task", 
-    //     4096, 
-    //     this,
-    //     10,
-    //     NULL
-    // );
+    xTaskCreate(
+        _esp_dmx_transmitter_task, 
+        "_esp_dmx_transmitter_task", 
+        4096, 
+        this,
+        10,
+        NULL
+    );
     
 }
 
