@@ -3,7 +3,7 @@
 
 const char* TAG = "ESP_DMX_RECEIVER";
 
-ESP_Dmx_Receiver::ESP_Dmx_Receiver(uart_port_t uart_num) : _dmx_uart_num(uart_num){}
+ESP_Dmx_Receiver::ESP_Dmx_Receiver(gpio_num_t rx_pin) : _dmx_rx_pin(rx_pin){}
 ESP_Dmx_Receiver::~ESP_Dmx_Receiver() {
     if (_uart_queue) {
         vQueueDelete(_uart_queue);
@@ -75,9 +75,9 @@ void ESP_Dmx_Receiver::init() {
     uart_driver_install(
         _dmx_uart_num,
         _dmx_buffer_size * 2,               // RX buffer
-        0,               // TX buffer unused
+        0,                                  // TX buffer unused
         10,                                 // Queue size for events
-        _p_dmx_receiver->get_uart_queue(),  // Event queue handle
+        &_uart_queue,                        // Event queue handle
         0                                   // No special interrupt flags
     );
 
