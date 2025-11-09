@@ -10,17 +10,17 @@ void _esp_dmx_transmitter_task(void *pvParameters) {
     ESP_Dmx_Transmitter* p_dmx_transmitter = static_cast<ESP_Dmx_Transmitter*>(pvParameters);
 
     while(true) {
-        vTaskDelay(pdMS_TO_TICKS(25));
-        if(!p_dmx_transmitter->_flag_transmit) continue;
+    //     vTaskDelay(pdMS_TO_TICKS(25));
+    //     if(!p_dmx_transmitter->_flag_transmit) continue;
         p_dmx_transmitter->_flag_transmit = false;        
 
         size_t num_symbols = 1 + 513 * 5;
         rmt_symbol_word_t *items = (rmt_symbol_word_t*)malloc(num_symbols * sizeof(rmt_symbol_word_t));
 
 
-        items[0].duration0 = 25;        //  break 100us > 88us
+        items[0].duration0 = 125;        //  break 100us > 88us
         items[0].level0 = 0;            //  break = 0
-        items[0].duration1 = 3;         //  MAB 12us > 8us
+        items[0].duration1 = 100;         //  MAB 12us > 8us
         items[0].level1 = 1;            //  MAB = 1
 
 
